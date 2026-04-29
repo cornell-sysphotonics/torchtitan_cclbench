@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 import copy
+import inspect
 import math
 import os
 from collections.abc import Callable
@@ -13,6 +14,11 @@ import torch.nn as nn
 from torch.distributed._mesh_layout import _MeshLayout
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.pipelining import PipelineStage
+
+# get_mesh was added to PipelineStage after torch 2.10; guard for older installs
+_PIPELINE_STAGE_HAS_GET_MESH = (
+    "get_mesh" in inspect.signature(PipelineStage.__init__).parameters
+)
 from torch.distributed.pipelining.schedules import (
     _PipelineSchedule,
     _PipelineScheduleRuntime,
@@ -475,14 +481,10 @@ def pipeline_module_split(
                 # Replace with None
                 setattr(model, module_name, None)
 
-        stage = PipelineStage(
-            model,
-            stage_idx,
-            num_stages,
-            device,
-            group=pp_mesh.get_group("pp"),
-            get_mesh=get_mesh,
-        )
+        stage_kwargs: dict = {"group": pp_mesh.get_group("pp")}
+        if _PIPELINE_STAGE_HAS_GET_MESH and get_mesh is not None:
+            stage_kwargs["get_mesh"] = get_mesh
+        stage = PipelineStage(model, stage_idx, num_stages, device, **stage_kwargs)
         return stage, model
 
     num_stages = len(module_names_per_stage)

@@ -7,6 +7,8 @@
 
 set -ex
 
+
+
 # use envs as local overwrites for convenience
 # e.g.
 # LOG_RANK=0,1 NGPU=4 ./run_train.sh

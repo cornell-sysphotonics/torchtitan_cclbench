@@ -161,6 +161,15 @@ def llama3_8b() -> Trainer.Config:
     )
 
 
+def llama3_8b_ce_loss() -> Trainer.Config:
+    """Llama-3.1-8B with standard (non-chunked) CrossEntropyLoss for benchmarking."""
+    from torchtitan.components.loss import CrossEntropyLoss
+
+    config = llama3_8b()
+    config.loss = CrossEntropyLoss.Config()
+    return config
+
+
 def llama3_70b() -> Trainer.Config:
     return Trainer.Config(
         loss=ChunkedCELoss.Config(),

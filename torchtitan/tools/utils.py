@@ -86,7 +86,7 @@ def get_peak_flops(device_name: str) -> float:
         ]
         # Join all filtered lines into a single string
         device_name = " ".join(filtered_lines) or device_name
-    except FileNotFoundError as e:
+    except (FileNotFoundError, PermissionError, OSError) as e:
         logger.warning(f"Error running lspci: {e}, fallback to use device_name")
     if "A100" in device_name:
         # data from https://www.nvidia.com/en-us/data-center/a100/

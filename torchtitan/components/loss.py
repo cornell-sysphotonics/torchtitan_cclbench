@@ -374,7 +374,19 @@ class _DecoderOutputGradientBackProp(torch.autograd.Function):
         accumulated_grad: torch.Tensor,
         loss: torch.Tensor,
     ) -> torch.Tensor:
-        ctx.save_for_backward(accumulated_grad)
+        # PyTorch's C++ autograd engine cannot access DTensor storage through
+        # save_for_backward.  Save the local shard and enough metadata to
+        # rewrap it as a DTensor in backward.
+        from torch.distributed.tensor import DTensor
+
+        if isinstance(accumulated_grad, DTensor):
+            ctx._grad_is_dtensor = True
+            ctx._grad_device_mesh = accumulated_grad.device_mesh
+            ctx._grad_placements = accumulated_grad.placements
+            ctx.save_for_backward(accumulated_grad.to_local())
+        else:
+            ctx._grad_is_dtensor = False
+            ctx.save_for_backward(accumulated_grad)
         # Return a tensor with the correct loss value. We clone to avoid
         # in-place issues, and the grad_fn comes from this Function.
         return loss.detach().clone()
@@ -383,7 +395,17 @@ class _DecoderOutputGradientBackProp(torch.autograd.Function):
     def backward(  # pyrefly: ignore[bad-override]
         ctx, grad_output: torch.Tensor
     ) -> tuple[torch.Tensor, None, None]:
-        (accumulated_grad,) = ctx.saved_tensors
+        from torch.distributed.tensor import DTensor
+
+        (saved,) = ctx.saved_tensors
+        if ctx._grad_is_dtensor:
+            accumulated_grad = DTensor.from_local(
+                saved,
+                device_mesh=ctx._grad_device_mesh,
+                placements=ctx._grad_placements,
+            )
+        else:
+            accumulated_grad = saved
         # Return accumulated_grad as the gradient for hidden_states.
         # Autograd then propagates this through hidden_states' existing
         # decoder graph — equivalent to hidden_states.backward(accumulated_grad)
